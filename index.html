@@ -1,0 +1,523 @@
+<script type="text/javascript">
+        var gk_isXlsx = false;
+        var gk_xlsxFileLookup = {};
+        var gk_fileData = {};
+        function filledCell(cell) {
+          return cell !== '' && cell != null;
+        }
+        function loadFileData(filename) {
+        if (gk_isXlsx && gk_xlsxFileLookup[filename]) {
+            try {
+                var workbook = XLSX.read(gk_fileData[filename], { type: 'base64' });
+                var firstSheetName = workbook.SheetNames[0];
+                var worksheet = workbook.Sheets[firstSheetName];
+
+                // Convert sheet to JSON to filter blank rows
+                var jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false, defval: '' });
+                // Filter out blank rows (rows where all cells are empty, null, or undefined)
+                var filteredData = jsonData.filter(row => row.some(filledCell));
+
+                // Heuristic to find the header row by ignoring rows with fewer filled cells than the next row
+                var headerRowIndex = filteredData.findIndex((row, index) =>
+                  row.filter(filledCell).length >= filteredData[index + 1]?.filter(filledCell).length
+                );
+                // Fallback
+                if (headerRowIndex === -1 || headerRowIndex > 25) {
+                  headerRowIndex = 0;
+                }
+
+                // Convert filtered JSON back to CSV
+                var csv = XLSX.utils.aoa_to_sheet(filteredData.slice(headerRowIndex)); // Create a new sheet from filtered array of arrays
+                csv = XLSX.utils.sheet_to_csv(csv, { header: 1 });
+                return csv;
+            } catch (e) {
+                console.error(e);
+                return "";
+            }
+        }
+        return gk_fileData[filename] || "";
+        }
+        </script><!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Jogo da Velha JEPP</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Poppins', sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            margin: 0;
+            padding: 20px;
+            background-image: url('https://i.ibb.co/nM5n6h2T/2018-05-28-13-57-59.jpg');
+            background-size: cover;
+            background-position: center;
+            background-attachment: fixed;
+            position: relative;
+            min-height: 100vh;
+        }
+        body::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.6); /* Overlay ajustado para a nova imagem */
+            z-index: 0;
+        }
+        h1 {
+            color: #ffffff;
+            margin-bottom: 20px;
+            font-size: 2.5em;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
+            z-index: 1;
+        }
+        #start-section {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            opacity: 1;
+            transition: opacity 0.5s ease, transform 0.5s ease;
+            z-index: 1;
+        }
+        #start-section.hidden {
+            opacity: 0;
+            transform: translateY(-20px);
+            display: none;
+        }
+        #start-section input {
+            padding: 10px;
+            margin: 5px 0;
+            width: 220px;
+            border: none;
+            border-radius: 8px;
+            background: rgba(255, 255, 255, 0.9);
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+            font-size: 1em;
+            transition: transform 0.3s ease;
+        }
+        #start-section input:focus {
+            transform: scale(1.02);
+            outline: none;
+            box-shadow: 0 0 8px rgba(46, 125, 50, 0.5);
+        }
+        #start-button {
+            padding: 10px 20px;
+            background: linear-gradient(45deg, #2e7d32, #4caf50);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 1em;
+            margin-top: 10px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+            transition: transform 0.3s ease, background 0.3s ease;
+            z-index: 1;
+        }
+        #start-button:hover {
+            background: linear-gradient(45deg, #1b5e20, #388e3c);
+            transform: scale(1.05);
+        }
+        #game-board {
+            display: grid;
+            grid-template-columns: repeat(3, 100px);
+            grid-gap: 8px;
+            margin-bottom: 20px;
+            position: relative;
+            opacity: 0.5;
+            pointer-events: none;
+            transition: opacity 0.5s ease, transform 0.5s ease;
+            z-index: 1;
+        }
+        #game-board.active {
+            opacity: 1;
+            pointer-events: auto;
+            transform: translateY(-60px);
+        }
+        .cell {
+            width: 100px;
+            height: 100px;
+            background: rgba(255, 255, 255, 0.8);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 2.5em;
+            font-weight: 600;
+            cursor: pointer;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.2);
+            border: 2px solid #2e7d32;
+            transition: background 0.3s ease, transform 0.3s ease;
+        }
+        .cell:hover {
+            background: rgba(255, 255, 255, 1);
+            transform: scale(1.05);
+        }
+        .cell.x {
+            color: #d32f2f;
+        }
+        .cell.o {
+            color: #1976d2;
+        }
+        .win-line {
+            position: absolute;
+            background-color: #ffd700;
+            height: 6px;
+            transform-origin: 0 0;
+            pointer-events: none;
+            box-shadow: 0 0 8px rgba(255, 215, 0, 0.7);
+        }
+        #status {
+            font-size: 1.5em;
+            color: #ffffff;
+            margin-bottom: 15px;
+            text-shadow: 2px 2px 6px rgba(0, 0, 0, 0.8);
+            background: rgba(0, 0, 0, 0.7);
+            padding: 8px 15px;
+            border-radius: 8px;
+            display: inline-block;
+            z-index: 1;
+        }
+        #restart-button, #audio-toggle {
+            padding: 10px 20px;
+            background: linear-gradient(45deg, #2e7d32, #4caf50);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 1em;
+            margin: 5px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+            transition: transform 0.3s ease, background 0.3s ease;
+            z-index: 1;
+        }
+        #restart-button:hover, #audio-toggle:hover {
+            background: linear-gradient(45deg, #1b5e20, #388e3c);
+            transform: scale(1.05);
+        }
+        #restart-button:disabled, #audio-toggle:disabled {
+            background: #666;
+            cursor: not-allowed;
+            transform: none;
+        }
+        #audio-toggle.off {
+            background: #666;
+        }
+        #audio-toggle.off:hover {
+            background: #444;
+        }
+        .tabs {
+            display: flex;
+            margin-bottom: 15px;
+            z-index: 1;
+        }
+        .tabs .tab {
+            padding: 10px 15px;
+            cursor: pointer;
+            background: rgba(255, 255, 255, 0.9);
+            border: 1px solid #ccc;
+            border-bottom: none;
+            border-radius: 8px 8px 0 0;
+            margin-right: 5px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            transition: background 0.3s ease;
+        }
+        .tabs .tab:hover {
+            background: rgba(255, 255, 255, 1);
+        }
+        .tabs .tab.active {
+            background: #2e7d32;
+            color: white;
+        }
+        .tab-content {
+            display: none;
+            padding: 20px;
+            border: 1px solid #ccc;
+            border-top: none;
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 0 0 8px 8px;
+            width: 340px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+            z-index: 1;
+        }
+        .tab-content.active {
+            display: block;
+        }
+        #ranking-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 10px;
+        }
+        #ranking-table th, #ranking-table td {
+            border: 1px solid #ccc;
+            padding: 8px;
+            text-align: center;
+            font-size: 0.9em;
+        }
+        #ranking-table th {
+            background: #2e7d32;
+            color: white;
+        }
+        #ranking-table td {
+            background: rgba(255, 255, 255, 0.9);
+        }
+    </style>
+</head>
+<body>
+    <h1>Jogo da Velha JEPP</h1>
+    <div class="tabs">
+        <div class="tab active" onclick="openTab(event, 'jogo-tab')">Jogo</div>
+        <div class="tab" onclick="openTab(event, 'ranking-tab')">Ranking</div>
+    </div>
+    <div id="jogo-tab" class="tab-content active">
+        <div id="start-section">
+            <input type="text" id="player1-name" placeholder="Nome do Jogador 1 (X)">
+            <input type="text" id="player2-name" placeholder="Nome do Jogador 2 (O)">
+            <button id="start-button">Iniciar Jogo</button>
+        </div>
+        <div id="status">Vez do Jogador: X</div>
+        <div id="game-board"></div>
+        <button id="restart-button" disabled>Reiniciar Jogo</button>
+        <button id="audio-toggle" disabled class="on"><i class="fas fa-volume-up"></i> Som</button>
+    </div>
+    <div id="ranking-tab" class="tab-content">
+        <h2>Ranking</h2>
+        <table id="ranking-table">
+            <thead>
+                <tr>
+                    <th>Jogo</th>
+                    <th>Data</th>
+                    <th>Tempo (s)</th>
+                </tr>
+            </thead>
+            <tbody id="ranking-list"></tbody>
+        </table>
+    </div>
+
+    <script>
+        const startSection = document.getElementById('start-section');
+        const gameBoard = document.getElementById('game-board');
+        const status = document.getElementById('status');
+        const restartButton = document.getElementById('restart-button');
+        const audioToggle = document.getElementById('audio-toggle');
+        const player1Input = document.getElementById('player1-name');
+        const player2Input = document.getElementById('player2-name');
+        const startButton = document.getElementById('start-button');
+        const rankingList = document.getElementById('ranking-list');
+
+        const clickSound = new Audio('https://raw.githubusercontent.com/ekpb-cyborg/jogodavelha/refs/heads/main/aud/click.mp3');
+        const flipSound = new Audio('https://raw.githubusercontent.com/ekpb-cyborg/jogodavelha/refs/heads/main/aud/flip.mp3');
+        const winSound = new Audio('https://raw.githubusercontent.com/ekpb-cyborg/jogodavelha/refs/heads/main/aud/applause.mp3');
+        const gameOverSound = new Audio('https://raw.githubusercontent.com/ekpb-cyborg/jogodavelha/refs/heads/main/aud/game-over.mp3');
+        const noSound = new Audio('https://raw.githubusercontent.com/ekpb-cyborg/jogodavelha/refs/heads/main/aud/no_4.mp3');
+        const startGameSound = new Audio('https://raw.githubusercontent.com/ekpb-cyborg/jogodavelha/refs/heads/main/aud/start-game.mp3');
+        const teclaSound = new Audio('https://raw.githubusercontent.com/ekpb-cyborg/jogodavelha/refs/heads/main/aud/tecla.mp3');
+        const yesSound = new Audio('https://raw.githubusercontent.com/ekpb-cyborg/jogodavelha/refs/heads/main/aud/yes_1.mp3');
+        const musical1 = new Audio('https://raw.githubusercontent.com/ekpb-cyborg/jogodavelha/refs/heads/main/aud/musical1.mp3');
+        const musical2 = new Audio('https://raw.githubusercontent.com/ekpb-cyborg/jogodavelha/refs/heads/main/aud/musical2.mp3');
+
+        let currentPlayer = 'X';
+        let gameState = ['', '', '', '', '', '', '', '', ''];
+        let gameActive = false;
+        let player1Name = 'Jogador 1';
+        let player2Name = 'Jogador 2';
+        let startTime = null;
+        let ranking = JSON.parse(localStorage.getItem('ticTacToeRanking')) || [];
+
+        const winningCombinations = [
+            [0, 1, 2], [3, 4, 5], [6, 7, 8], // Linhas
+            [0, 3, 6], [1, 4, 7], [2, 5, 8], // Colunas
+            [0, 4, 8], [2, 4, 6]             // Diagonais
+        ];
+
+        let soundOn = true;
+
+        function createBoard() {
+            gameBoard.innerHTML = '';
+            gameState = ['', '', '', '', '', '', '', '', ''];
+            gameActive = true;
+            status.textContent = `Vez do Jogador: ${player1Name} (X)`;
+            startTime = Date.now();
+            for (let i = 0; i < 9; i++) {
+                const cell = document.createElement('div');
+                cell.classList.add('cell');
+                cell.setAttribute('data-index', i);
+                cell.addEventListener('click', handleCellClick);
+                gameBoard.appendChild(cell);
+            }
+            if (soundOn) playMusic();
+        }
+
+        function handleCellClick(e) {
+            const cell = e.target;
+            const index = parseInt(cell.getAttribute('data-index'));
+
+            if (gameState[index] !== '' || !gameActive) {
+                if (soundOn) noSound.play();
+                return;
+            }
+
+            gameState[index] = currentPlayer;
+            cell.textContent = currentPlayer;
+            cell.classList.add(currentPlayer.toLowerCase());
+
+            if (soundOn) yesSound.play();
+
+            if (checkWin()) {
+                const winningCombo = winningCombinations.find(combination =>
+                    combination.every(index => gameState[index] === currentPlayer)
+                );
+                drawWinLine(winningCombo);
+                const winnerName = currentPlayer === 'X' ? player1Name : player2Name;
+                const loserName = currentPlayer === 'X' ? player2Name : player1Name;
+                status.textContent = `${winnerName} venceu!`;
+                if (soundOn) winSound.play();
+                gameActive = false;
+                saveToRanking(winnerName, loserName);
+                return;
+            }
+
+            if (checkDraw()) {
+                status.textContent = 'Empate!';
+                if (soundOn) gameOverSound.play();
+                gameActive = false;
+                saveToRanking(null, null);
+                return;
+            }
+
+            if (soundOn) flipSound.play();
+            currentPlayer = currentPlayer === 'X' ? 'O' : 'X';
+            status.textContent = `Vez do Jogador: ${currentPlayer === 'X' ? player1Name : player2Name} (${currentPlayer})`;
+        }
+
+        function checkWin() {
+            return winningCombinations.some(combination => {
+                return combination.every(index => {
+                    return gameState[index] === currentPlayer;
+                });
+            });
+        }
+
+        function checkDraw() {
+            return gameState.every(cell => cell !== '');
+        }
+
+        function drawWinLine(winningCombo) {
+            const firstCell = gameBoard.children[winningCombo[0]];
+            const lastCell = gameBoard.children[winningCombo[2]];
+
+            const firstRect = firstCell.getBoundingClientRect();
+            const lastRect = lastCell.getBoundingClientRect();
+            const boardRect = gameBoard.getBoundingClientRect();
+
+            const startX = firstRect.left - boardRect.left + firstRect.width / 2;
+            const startY = firstRect.top - boardRect.top + firstRect.height / 2;
+            const endX = lastRect.left - boardRect.left + lastRect.width / 2;
+            const endY = lastRect.top - boardRect.top + lastRect.height / 2;
+
+            const length = Math.sqrt(Math.pow(endX - startX, 2) + Math.pow(endY - startY, 2));
+            const angle = Math.atan2(endY - startY, endX - startX) * 180 / Math.PI;
+
+            const line = document.createElement('div');
+            line.classList.add('win-line');
+            line.style.width = `${length}px`;
+            line.style.left = `${startX}px`;
+            line.style.top = `${startY}px`;
+            line.style.transform = `rotate(${angle}deg)`;
+            gameBoard.appendChild(line);
+        }
+
+        function restartGame() {
+            currentPlayer = 'X';
+            gameActive = false;
+            startSection.classList.remove('hidden');
+            gameBoard.classList.remove('active');
+            restartButton.disabled = true;
+            audioToggle.disabled = true;
+            status.textContent = `Vez do Jogador: ${player1Name} (X)`;
+        }
+
+        function startGame() {
+            player1Name = player1Input.value.trim() || 'Jogador 1';
+            player2Name = player2Input.value.trim() || 'Jogador 2';
+            if (!player1Name || !player2Name) {
+                alert('Por favor, insira os nomes dos dois jogadores.');
+                return;
+            }
+            if (soundOn) startGameSound.play();
+            startSection.classList.add('hidden');
+            gameBoard.classList.add('active');
+            restartButton.disabled = false;
+            audioToggle.disabled = false;
+            createBoard();
+        }
+
+        function toggleAudio() {
+            soundOn = !soundOn;
+            audioToggle.classList.toggle('on', soundOn);
+            audioToggle.classList.toggle('off', !soundOn);
+            const icon = audioToggle.querySelector('i');
+            icon.classList.toggle('fa-volume-up', soundOn);
+            icon.classList.toggle('fa-volume-mute', !soundOn);
+            if (!soundOn && musical1) musical1.pause();
+        }
+
+        function playMusic() {
+            if (!soundOn || !gameActive) return;
+            if (musical1.paused) {
+                musical1.currentTime = 0;
+                musical1.play().catch(err => console.warn('Erro ao tocar musical1:', err));
+                musical1.onended = () => {
+                    musical2.currentTime = 0;
+                    musical2.play().catch(err => console.warn('Erro ao tocar musical2:', err));
+                    musical2.onended = () => playMusic();
+                };
+            }
+        }
+
+        function saveToRanking(winnerName, loserName) {
+            const endTime = Date.now();
+            const timeTaken = Math.floor((endTime - startTime) / 1000); // Tempo em segundos
+            const date = new Date().toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+            let gameResult = winnerName ? `${winnerName} venceu ${loserName}` : `${player1Name} e ${player2Name} empataram`;
+            ranking.push({ game: gameResult, date: date, time: timeTaken });
+            ranking.sort((a, b) => a.time - b.time); // Ordena por tempo menor
+            ranking = ranking.slice(0, 10); // Mantém apenas os 10 melhores
+            localStorage.setItem('ticTacToeRanking', JSON.stringify(ranking));
+            updateRanking();
+        }
+
+        function updateRanking() {
+            rankingList.innerHTML = '';
+            ranking.forEach((entry, index) => {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td>${entry.game}</td>
+                    <td>${entry.date}</td>
+                    <td>${entry.time}s</td>
+                `;
+                rankingList.appendChild(tr);
+            });
+        }
+
+        function openTab(evt, tabName) {
+            document.querySelectorAll('.tabs .tab').forEach(tab => tab.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
+            evt.currentTarget.classList.add('active');
+            document.getElementById(tabName).classList.add('active');
+        }
+
+        startButton.addEventListener('click', startGame);
+        restartButton.addEventListener('click', restartGame);
+        audioToggle.addEventListener('click', toggleAudio);
+
+        createBoard();
+        updateRanking();
+    </script>
+</body>
+</html>
