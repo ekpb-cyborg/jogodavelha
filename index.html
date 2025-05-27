@@ -67,7 +67,7 @@
             left: 0;
             width: 100%;
             height: 100%;
-            background: rgba(0, 0, 0, 0.6); /* Overlay ajustado para a nova imagem */
+            background: rgba(0, 0, 0, 0.6);
             z-index: 0;
         }
         h1 {
@@ -106,6 +106,17 @@
             outline: none;
             box-shadow: 0 0 8px rgba(46, 125, 50, 0.5);
         }
+        #start-section select {
+            padding: 10px;
+            margin: 5px 0;
+            width: 220px;
+            border: none;
+            border-radius: 8px;
+            background: rgba(255, 255, 255, 0.9);
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+            font-size: 1em;
+            cursor: pointer;
+        }
         #start-button {
             padding: 10px 20px;
             background: linear-gradient(45deg, #2e7d32, #4caf50);
@@ -137,7 +148,7 @@
         #game-board.active {
             opacity: 1;
             pointer-events: auto;
-            transform: translateY(-60px);
+            transform: translateY(-90px);
         }
         .cell {
             width: 100px;
@@ -276,6 +287,10 @@
     </div>
     <div id="jogo-tab" class="tab-content active">
         <div id="start-section">
+            <select id="game-mode" onchange="toggleGameMode()">
+                <option value="pvp">Jogador vs. Jogador</option>
+                <option value="pvm">Jogador vs. Máquina</option>
+            </select>
             <input type="text" id="player1-name" placeholder="Nome do Jogador 1 (X)">
             <input type="text" id="player2-name" placeholder="Nome do Jogador 2 (O)">
             <button id="start-button">Iniciar Jogo</button>
@@ -307,6 +322,7 @@
         const audioToggle = document.getElementById('audio-toggle');
         const player1Input = document.getElementById('player1-name');
         const player2Input = document.getElementById('player2-name');
+        const gameModeSelect = document.getElementById('game-mode');
         const startButton = document.getElementById('start-button');
         const rankingList = document.getElementById('ranking-list');
 
@@ -328,6 +344,7 @@
         let player2Name = 'Jogador 2';
         let startTime = null;
         let ranking = JSON.parse(localStorage.getItem('ticTacToeRanking')) || [];
+        let isMachineMode = false;
 
         const winningCombinations = [
             [0, 1, 2], [3, 4, 5], [6, 7, 8], // Linhas
@@ -336,6 +353,18 @@
         ];
 
         let soundOn = true;
+
+        function toggleGameMode() {
+            isMachineMode = gameModeSelect.value === 'pvm';
+            if (isMachineMode) {
+                player2Input.disabled = true;
+                player2Input.value = 'Máquina';
+            } else {
+                player2Input.disabled = false;
+                player2Input.value = '';
+                player2Input.placeholder = 'Nome do Jogador 2 (O)';
+            }
+        }
 
         function createBoard() {
             gameBoard.innerHTML = '';
@@ -363,6 +392,55 @@
             }
 
             gameState[index] = currentPlayer;
+            cell.textContent = currentPlayer;
+            cell.classList.add(currentPlayer.toLowerCase());
+
+            if (soundOn) yesSound.play();
+
+            if (checkWin()) {
+                const winningCombo = winningCombinations.find(combination =>
+                    combination.every(index => gameState[index] === currentPlayer)
+                );
+                drawWinLine(winningCombo);
+                const winnerName = currentPlayer === 'X' ? player1Name : player2Name;
+                const loserName = currentPlayer === 'X' ? player2Name : player1Name;
+                status.textContent = `${winnerName} venceu!`;
+                if (soundOn) winSound.play();
+                gameActive = false;
+                saveToRanking(winnerName, loserName);
+                return;
+            }
+
+            if (checkDraw()) {
+                status.textContent = 'Empate!';
+                if (soundOn) gameOverSound.play();
+                gameActive = false;
+                saveToRanking(null, null);
+                return;
+            }
+
+            if (soundOn) flipSound.play();
+            currentPlayer = currentPlayer === 'X' ? 'O' : 'X';
+            status.textContent = `Vez do Jogador: ${currentPlayer === 'X' ? player1Name : player2Name} (${currentPlayer})`;
+
+            if (isMachineMode && currentPlayer === 'O' && gameActive) {
+                setTimeout(machinePlay, 5000); // Máquina joga após 5 segundos
+            }
+        }
+
+        function machinePlay() {
+            if (!gameActive || currentPlayer !== 'O') return;
+
+            const emptyCells = gameState
+                .map((cell, index) => (cell === '' ? index : null))
+                .filter(index => index !== null);
+
+            if (emptyCells.length === 0) return;
+
+            const randomIndex = emptyCells[Math.floor(Math.random() * emptyCells.length)];
+            const cell = gameBoard.children[randomIndex];
+
+            gameState[randomIndex] = currentPlayer;
             cell.textContent = currentPlayer;
             cell.classList.add(currentPlayer.toLowerCase());
 
@@ -444,9 +522,13 @@
 
         function startGame() {
             player1Name = player1Input.value.trim() || 'Jogador 1';
-            player2Name = player2Input.value.trim() || 'Jogador 2';
-            if (!player1Name || !player2Name) {
-                alert('Por favor, insira os nomes dos dois jogadores.');
+            player2Name = isMachineMode ? 'Máquina' : (player2Input.value.trim() || 'Jogador 2');
+            if (!player1Name) {
+                alert('Por favor, insira o nome do Jogador 1.');
+                return;
+            }
+            if (!isMachineMode && !player2Name) {
+                alert('Por favor, insira o nome do Jogador 2.');
                 return;
             }
             if (soundOn) startGameSound.play();
@@ -482,12 +564,12 @@
 
         function saveToRanking(winnerName, loserName) {
             const endTime = Date.now();
-            const timeTaken = Math.floor((endTime - startTime) / 1000); // Tempo em segundos
+            const timeTaken = Math.floor((endTime - startTime) / 1000);
             const date = new Date().toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
             let gameResult = winnerName ? `${winnerName} venceu ${loserName}` : `${player1Name} e ${player2Name} empataram`;
             ranking.push({ game: gameResult, date: date, time: timeTaken });
-            ranking.sort((a, b) => a.time - b.time); // Ordena por tempo menor
-            ranking = ranking.slice(0, 10); // Mantém apenas os 10 melhores
+            ranking.sort((a, b) => a.time - b.time);
+            ranking = ranking.slice(0, 10);
             localStorage.setItem('ticTacToeRanking', JSON.stringify(ranking));
             updateRanking();
         }
