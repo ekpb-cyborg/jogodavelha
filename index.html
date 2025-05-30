@@ -284,6 +284,7 @@
     <div class="tabs">
         <div class="tab active" onclick="openTab(event, 'jogo-tab')">Jogo</div>
         <div class="tab" onclick="openTab(event, 'ranking-tab')">Ranking</div>
+        <div class="tab" onclick="openTab(event, 'jogos-tab')">+Jogos</div>
     </div>
     <div id="jogo-tab" class="tab-content active">
         <div id="start-section">
@@ -312,6 +313,13 @@
             </thead>
             <tbody id="ranking-list"></tbody>
         </table>
+    </div>
+    <div id="jogos-tab" class="tab-content">
+        <h2>+Jogos</h2>
+        <ul class="links-list">
+            <li><i class="fas fa-gamepad"></i> <a href="https://ekpb-cyborg.github.io/jogodavelha/" target="_blank">Jogo da Velha</a></li>
+            <li><i class="fas fa-gamepad"></i> <a href="https://ekpb-cyborg.github.io/Game-Busca-Palavras/" target="_blank">Caça Palavras</a></li>
+        </ul>
     </div>
 
     <script>
@@ -408,6 +416,7 @@
                 if (soundOn) winSound.play();
                 gameActive = false;
                 saveToRanking(winnerName, loserName);
+                sendEmail('game-end', { winner: winnerName, loser: loserName, ranking: ranking });
                 return;
             }
 
@@ -416,6 +425,7 @@
                 if (soundOn) gameOverSound.play();
                 gameActive = false;
                 saveToRanking(null, null);
+                sendEmail('game-end', { winner: 'Empate', loser: null, ranking: ranking });
                 return;
             }
 
@@ -424,7 +434,7 @@
             status.textContent = `Vez do Jogador: ${currentPlayer === 'X' ? player1Name : player2Name} (${currentPlayer})`;
 
             if (isMachineMode && currentPlayer === 'O' && gameActive) {
-                setTimeout(machinePlay, 5000); // Máquina joga após 5 segundos
+                setTimeout(machinePlay, 5000);
             }
         }
 
@@ -457,6 +467,7 @@
                 if (soundOn) winSound.play();
                 gameActive = false;
                 saveToRanking(winnerName, loserName);
+                sendEmail('game-end', { winner: winnerName, loser: loserName, ranking: ranking });
                 return;
             }
 
@@ -465,6 +476,7 @@
                 if (soundOn) gameOverSound.play();
                 gameActive = false;
                 saveToRanking(null, null);
+                sendEmail('game-end', { winner: 'Empate', loser: null, ranking: ranking });
                 return;
             }
 
@@ -537,6 +549,7 @@
             restartButton.disabled = false;
             audioToggle.disabled = false;
             createBoard();
+            sendEmail('game-start', { player: player1Name });
         }
 
         function toggleAudio() {
@@ -592,6 +605,24 @@
             document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
             evt.currentTarget.classList.add('active');
             document.getElementById(tabName).classList.add('active');
+        }
+
+        function sendEmail(type, data) {
+            const emailData = {
+                to: 'edsonkpalacio@gmail.com',
+                subject: '',
+                body: ''
+            };
+
+            if (type === 'game-start') {
+                emailData.subject = 'Novo Jogo Iniciado - Jogo da Velha JEPP';
+                emailData.body = `O jogo foi iniciado por ${data.player} às ${new Date().toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' })}.`;
+            } else if (type === 'game-end') {
+                emailData.subject = 'Jogo Finalizado - Jogo da Velha JEPP';
+                emailData.body = `O jogo terminou! ${data.winner} ${data.loser ? `venceu ${data.loser}` : 'empatou'} às ${new Date().toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' })}.\n\nRanking:\n${data.ranking.map(entry => `${entry.game} - ${entry.date} - ${entry.time}s`).join('\n')}`;
+            }
+
+            console.log('E-mail simulado enviado:', emailData);
         }
 
         startButton.addEventListener('click', startGame);
